@@ -96,10 +96,12 @@ object Similarity {
     fun tokens(title: String, exclude: Collection<String> = emptyList()): Set<String> {
         val ex = exclude.map { it.lowercase(Locale.ROOT) }.toSet()
         val out = linkedSetOf<String>()
-        for (w in TextTools.words(title)) {
+        // Titles are action-first, so only the first word can be the action ("Send the report");
+        // elsewhere words like "report" or "file" are the subject.
+        TextTools.words(title).forEachIndexed { index, w ->
             val word = w.trim('\'')
-            if (word.length < 3 || word in ex || word in STOP) continue
-            out += if (word in Vocabulary.ACTION_VERBS) "v:$word" else stem(word)
+            if (word.length < 3 || word in ex || word in STOP) return@forEachIndexed
+            out += if (index == 0 && word in Vocabulary.ACTION_VERBS) "v:$word" else stem(word)
         }
         return out
     }
