@@ -23,19 +23,8 @@ android {
         resValue("string", "app_name", "Nudge")
     }
 
-    signingConfigs {
-        getByName("debug") {
-            // Shared debug key provided by CI (see .github/workflows/android.yml).
-            val keystorePath = System.getenv("NUDGE_DEBUG_KEYSTORE")
-            if (keystorePath != null && file(keystorePath).exists()) {
-                storeFile = file(keystorePath)
-                storeType = "pkcs12"
-                storePassword = System.getenv("NUDGE_DEBUG_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("NUDGE_DEBUG_KEY_ALIAS") ?: "nudgedebug"
-                keyPassword = System.getenv("NUDGE_DEBUG_KEYSTORE_PASSWORD")
-            }
-        }
-    }
+    // Debug builds use Android's standard auto-generated debug key. Stable signing is deferred
+    // until stable releases (docs/SIGNING.md).
 
     buildTypes {
         debug {

@@ -29,7 +29,7 @@ Honest list of what this build does **not** do or may get wrong. Updated each mi
 - If Android kills Nudge in the middle of analysing a notification, that one notification is skipped (by design: we don't queue message text).
 - Reminder titles are derived from message wording, so a title can contain part of what someone wrote (e.g. "Send Ama the report"). Titles are encrypted at rest.
 - With sender names off, Nudge stores a keyed hash of the sender so duplicates can be detected. It can't be reversed without the device's Keystore key, which "Delete all data" destroys.
-- Debug builds are signed with a project debug key. They are for testing, not distribution.
+- Development builds use a temporary Android debug key that can change between builds. Updating may require an uninstall, which erases test reminders. They are for testing, not distribution.
 
 ## Not in Phase 1 (planned)
 Google Calendar / phone calendar, Google Tasks, Microsoft To Do, Samsung Reminder (via To Do), optional cloud AI, Personal Context Profile, adaptive learning from corrections, home-screen widget, languages other than English.

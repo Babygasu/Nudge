@@ -2,6 +2,13 @@
 
 Short records of significant technical decisions. Newest first.
 
+## D-006 · Standard debug signing for development builds (2026-11-05)
+The product owner chose zero-configuration testing over update continuity. CI now uses Android's auto-generated
+debug key: no secrets, no keystore in GitHub. The cost, accepted: certificates can differ between builds, so an
+update may need an uninstall that erases test data. Stable signing (secrets + certificate check) is deferred until
+stable releases. The workflow uses a read-only token for building and a separate write-only publish job that never
+runs for pull requests. Supersedes the shared-debug-key part of D-003.
+
 ## D-005 · Defaults for open product decisions (2026-11-05)
 The product owner approved the Phase 0 plan without choosing D2–D9. Phase 1 uses the recommended defaults, all reversible:
 English first · message text held in memory only (no queue) · overlay bubble, off by default · phone calendar instead of the Google Calendar API (Phase 3) · no cloud AI before Phase 3 · design to Google Play policy · public repository.

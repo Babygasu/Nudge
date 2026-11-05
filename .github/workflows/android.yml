@@ -1,4 +1,9 @@
-name: Build debug APK
+name: Build dev APK
+
+# Development builds use Android's standard debug signing. No signing secrets are needed.
+# The debug certificate is generated fresh on each CI runner, so it can differ between builds:
+# installing a newer build may require uninstalling the previous one (this erases its test data).
+# Stable signing is deferred until we prepare stable releases (see docs/SIGNING.md).
 
 on:
   push:
@@ -6,8 +11,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Least privilege by default: the build job (which runs repository and pull-request code)
+# can only read. Only the separate publish job may create releases.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: android-${{ github.ref }}
@@ -17,14 +24,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    env:
-      NUDGE_DEBUG_KEY_ALIAS: nudgedebug
-      # SHA-256 fingerprint of the project's debug signing CERTIFICATE (public information,
-      # not a secret). Every published APK must match it, so updates install over each other
-      # and keep the user's data. Only change this if the signing key is deliberately replaced.
-      EXPECTED_CERT_SHA256: 752c4343812bfc25981cd2c1b14df28efb8c09eda5090fccbd88ccff164af34f
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-java@v4
         with:
@@ -35,57 +38,23 @@ jobs:
         with:
           gradle-version: "8.10.2"
 
-      # A shared debug key (stored as an encrypted GitHub secret) means every
-      # APK has the same signature, so new builds install as updates and keep
-      # your reminders and permissions. Without it, each build would need an uninstall.
-      # Push builds FAIL if the key is missing, so an APK that can't update your install is never published.
-      # Pull requests (which can't read secrets) still build and test, but publish nothing.
-      - name: Prepare debug signing key
-        env:
-          KEYSTORE_B64: ${{ secrets.NUDGE_DEBUG_KEYSTORE_B64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.NUDGE_DEBUG_KEYSTORE_PASSWORD }}
-        run: |
-          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/nudge-debug.p12"
-            echo "NUDGE_DEBUG_KEYSTORE=$RUNNER_TEMP/nudge-debug.p12" >> "$GITHUB_ENV"
-            echo "SIGNED_WITH_PROJECT_KEY=true" >> "$GITHUB_ENV"
-          elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "::warning::Signing secrets unavailable (pull request). The APK is built for checking only and will not be published."
-          else
-            echo "::error::Signing secrets NUDGE_DEBUG_KEYSTORE_B64 / NUDGE_DEBUG_KEYSTORE_PASSWORD are not set. See docs/SIGNING.md."
-            exit 1
-          fi
-
       - name: Unit tests
         run: gradle test --stacktrace
 
       - name: Build debug APK
-        env:
-          NUDGE_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.NUDGE_DEBUG_KEYSTORE_PASSWORD }}
         run: gradle assembleDebug --stacktrace
 
-      - name: Remove decoded key from runner
-        if: always()
-        run: rm -f "$RUNNER_TEMP/nudge-debug.p12"
-
-      # Proves the APK carries the project certificate before anyone can download it.
-      - name: Verify APK signing certificate
-        if: env.SIGNED_WITH_PROJECT_KEY == 'true'
+      - name: Verify APK signature
         run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
           APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner"
-          "$APKSIGNER" verify --print-certs app/build/outputs/apk/debug/app-debug.apk > certs.txt
-          cat certs.txt
-          ACTUAL=$(grep -m1 "certificate SHA-256 digest" certs.txt | awk '{print $NF}')
-          if [ "$ACTUAL" != "$EXPECTED_CERT_SHA256" ]; then
-            echo "::error::APK certificate $ACTUAL does not match the project certificate $EXPECTED_CERT_SHA256. Not publishing."
-            exit 1
-          fi
-          echo "Signing certificate verified: $ACTUAL"
-
-      - name: Name the APK
-        run: |
+          "$APKSIGNER" verify --print-certs "$APK" | tee certs.txt
+          grep -q "CN=Android Debug" certs.txt || { echo "::error::APK is not signed with the standard Android debug certificate"; exit 1; }
+          FINGERPRINT=$(grep -m1 "certificate SHA-256 digest" certs.txt | awk '{print $NF}')
           mkdir -p out
-          cp app/build/outputs/apk/debug/app-debug.apk "out/nudge-debug-${{ github.run_number }}.apk"
+          cp "$APK" "out/nudge-dev-${{ github.run_number }}.apk"
+          echo "$FINGERPRINT" > out/certificate-sha256.txt
+          echo "Debug certificate SHA-256: $FINGERPRINT"
 
       - name: Upload test reports
         if: always()
@@ -99,31 +68,51 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nudge-debug-${{ github.run_number }}
-          path: out/*.apk
+          name: nudge-dev-${{ github.run_number }}
+          path: out/
           retention-days: 30
 
-      # Publishing to GitHub Releases gives a plain .apk link you can open on the phone.
-      - name: Publish phone download (GitHub Release)
-        if: github.event_name != 'pull_request' && env.SIGNED_WITH_PROJECT_KEY == 'true'
+  # Publishes the APK as a GitHub pre-release so it can be downloaded directly on the phone.
+  # Runs only for pushes to this repository (never for pull requests), checks out no code,
+  # and only handles the already-built APK.
+  publish:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: nudge-dev-${{ github.run_number }}
+          path: out
+
+      - name: Create development pre-release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN: ${{ github.run_number }}
+          BRANCH: ${{ github.ref_name }}
         run: |
-          TAG="build-${{ github.run_number }}"
+          FINGERPRINT=$(cat out/certificate-sha256.txt)
           SHORT_SHA="${GITHUB_SHA::7}"
-          PRERELEASE=""
-          if [ "$GITHUB_REF_NAME" != "main" ]; then PRERELEASE="--prerelease"; fi
           cat > notes.md <<EOF
-          Debug build ${{ github.run_number }} from branch ${GITHUB_REF_NAME} (commit ${SHORT_SHA}).
+          ⚠️ **Development / testing build. Not a stable release.**
 
-          **Install on your phone:** download nudge-debug-${{ github.run_number }}.apk below, open it, and allow your browser to install apps if asked.
-          See docs/INSTALL_AND_TEST.md for the full guide and test checklist.
+          - Build ${RUN} from branch ${BRANCH} (commit ${SHORT_SHA}).
+          - Signed with a temporary Android debug key. If installing it over an older Nudge build fails
+            with "App not installed" or "package conflicts", uninstall **Nudge (debug)** first.
+            This erases its test reminders.
+          - For testing only. Don't rely on it for real reminders yet.
 
-          Signing certificate SHA-256: ${EXPECTED_CERT_SHA256} (verified in CI). Installs as an update over any earlier Nudge (debug) build with the same certificate.
+          **Install:** on your Android phone, download nudge-dev-${RUN}.apk below and open it.
+          Allow your browser to install apps if asked. Guide: docs/INSTALL_AND_TEST.md
 
-          This is a test build: it is signed with a debug key and is not a Play Store release.
+          Debug certificate SHA-256: ${FINGERPRINT}
           EOF
-          gh release create "$TAG" out/*.apk \
+          gh release create "dev-${RUN}" "out/nudge-dev-${RUN}.apk" \
             --target "$GITHUB_SHA" \
-            --title "Nudge debug build ${{ github.run_number }} (${GITHUB_REF_NAME})" \
-            --notes-file notes.md $PRERELEASE
+            --title "Nudge DEV build ${RUN} (testing only)" \
+            --notes-file notes.md \
+            --prerelease

@@ -6,12 +6,11 @@ No USB cable, no Android Studio. Every push to GitHub builds a new APK automatic
 
 **On your phone** (easiest):
 
-1. Open **https://github.com/babygasu/nudge/releases** in your phone's browser.
-2. The newest build is at the top: **"Nudge debug build N (branch)"**.
-   - Builds from `main` are normal releases; builds from other branches are marked *Pre-release*.
-3. Under **Assets**, tap **`nudge-debug-N.apk`** to download it.
+1. Open **https://github.com/Babygasu/Nudge/releases** in your phone's browser.
+2. The newest build is at the top: **"Nudge DEV build N (testing only)"**, marked *Pre-release*.
+3. Under **Assets**, tap **`nudge-dev-N.apk`** to download it.
 
-**On the laptop** (alternative): GitHub → **Actions** → the latest green run → **Artifacts** → `nudge-debug-N`. This downloads a `.zip` containing the APK, so you'd have to move it to the phone yourself. The Releases page is simpler.
+**On the laptop** (alternative): GitHub → **Actions** → the latest green run → **Artifacts** → `nudge-dev-N`. This downloads a `.zip` containing the APK, so you'd have to move it to the phone yourself. The Releases page is simpler.
 
 > A build takes about 5–8 minutes after a push. If the newest release isn't there yet, check **Actions** to see whether it's still running or failed.
 
@@ -22,9 +21,7 @@ No USB cable, no Android Studio. Every push to GitHub builds a new APK automatic
 3. Google Play Protect may warn that the app is unrecognised. This is expected for test builds: tap **More details → Install anyway**.
 4. The app appears as **"Nudge (debug)"**.
 
-**Updating:** install the newer APK over the old one. Your reminders and permissions are kept, because every published build is signed with the same project debug key. CI verifies the certificate before publishing; see [SIGNING.md](SIGNING.md).
-**Don't install `build-1` or `build-2`.** They were made before the signing key was configured.
-If Android ever says *"App not installed, package conflicts"*, the signature changed (for example, a build made without the shared key). Uninstall Nudge (debug) and install again; this erases its reminders.
+**Updating:** try installing the newer APK over the old one. Development builds use a temporary debug key that can change between builds. If Android says *"App not installed"* or *"package conflicts"*, uninstall **Nudge (debug)** (long-press the icon → App info → Uninstall) and install the new one. This erases its test reminders, and you'll need to redo onboarding, including "Allow restricted settings". See [SIGNING.md](SIGNING.md).
 
 ## 3. First-run setup (about 2 minutes)
 

@@ -9,8 +9,8 @@ reminders. It works entirely on your phone.
 > Status: **Phase 1 (functional foundation)**: debug builds for testing on a real phone.
 
 ## Install a test build
-Open **[Releases](https://github.com/babygasu/nudge/releases)** on your Android phone and download the
-newest `nudge-debug-N.apk`. Full guide and test checklist: **[docs/INSTALL_AND_TEST.md](docs/INSTALL_AND_TEST.md)**.
+Open **[Releases](https://github.com/Babygasu/Nudge/releases)** on your Android phone and download the
+newest `nudge-dev-N.apk` (development builds, for testing only). Full guide and test checklist: **[docs/INSTALL_AND_TEST.md](docs/INSTALL_AND_TEST.md)**.
 
 ## What works in Phase 1
 - Onboarding that explains every permission; every permission can be skipped

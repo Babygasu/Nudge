@@ -68,7 +68,7 @@ Use Share → Nudge or the paste screen (✎ on Today) for these:
 | ★6.1 | Phone Settings → Apps → Nudge (debug) → Permissions / "All permissions" | **No** internet/network access listed |
 | ★6.2 | Privacy → Pause all detection, friend sends a request | Nothing created. Unpause |
 | ★6.3 | Turn **sender names off**, detect a new message | Title uses "them", no name shown anywhere |
-| ★6.4 | **Update test:** with a few reminders saved, install the *next* build over the top (I'll publish one when you reach this step) | Installs **without** uninstalling; all reminders and settings still there |
+| 6.4 | *Deferred until stable signing.* Install the next dev build over the top | May need an uninstall (expected for dev builds). If it installs, reminders should still be there |
 | 6.5 | Privacy → Delete completed and dismissed | Only finished items removed |
 | ★6.6 | Privacy → Delete all Nudge data (do this **last**) | Back to onboarding, no reminders. WhatsApp/Gmail messages untouched |
 
