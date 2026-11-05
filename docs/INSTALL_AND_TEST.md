@@ -22,7 +22,8 @@ No USB cable, no Android Studio. Every push to GitHub builds a new APK automatic
 3. Google Play Protect may warn that the app is unrecognised. This is expected for test builds: tap **More details → Install anyway**.
 4. The app appears as **"Nudge (debug)"**.
 
-**Updating:** install the newer APK over the old one. Your reminders and permissions are kept, because every build is signed with the same project debug key.
+**Updating:** install the newer APK over the old one. Your reminders and permissions are kept, because every published build is signed with the same project debug key. CI verifies the certificate before publishing; see [SIGNING.md](SIGNING.md).
+**Don't install `build-1` or `build-2`.** They were made before the signing key was configured.
 If Android ever says *"App not installed, package conflicts"*, the signature changed (for example, a build made without the shared key). Uninstall Nudge (debug) and install again; this erases its reminders.
 
 ## 3. First-run setup (about 2 minutes)
@@ -42,6 +43,9 @@ Onboarding walks you through each permission. All of them are optional:
 **Settings → Apps → Nudge (debug) → ⋮ (top-right) → Allow restricted settings → confirm**, then turn on notification access again. On some phones the ⋮ option only appears after you've tried to turn access on once.
 
 ## 4. Test checklist
+
+> For the pre-merge test round use **[DEVICE_TEST_PLAN.md](DEVICE_TEST_PLAN.md)**, which marks the critical tests.
+> The list below is the broader reference.
 
 Use this for each build and note anything that fails (screenshot + what you did).
 

@@ -19,6 +19,10 @@ jobs:
     timeout-minutes: 40
     env:
       NUDGE_DEBUG_KEY_ALIAS: nudgedebug
+      # SHA-256 fingerprint of the project's debug signing CERTIFICATE (public information,
+      # not a secret). Every published APK must match it, so updates install over each other
+      # and keep the user's data. Only change this if the signing key is deliberately replaced.
+      EXPECTED_CERT_SHA256: 752c4343812bfc25981cd2c1b14df28efb8c09eda5090fccbd88ccff164af34f
     steps:
       - uses: actions/checkout@v4
 
@@ -34,15 +38,22 @@ jobs:
       # A shared debug key (stored as an encrypted GitHub secret) means every
       # APK has the same signature, so new builds install as updates and keep
       # your reminders and permissions. Without it, each build would need an uninstall.
+      # Push builds FAIL if the key is missing, so an APK that can't update your install is never published.
+      # Pull requests (which can't read secrets) still build and test, but publish nothing.
       - name: Prepare debug signing key
         env:
           KEYSTORE_B64: ${{ secrets.NUDGE_DEBUG_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.NUDGE_DEBUG_KEYSTORE_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_B64" ]; then
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
             echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/nudge-debug.p12"
             echo "NUDGE_DEBUG_KEYSTORE=$RUNNER_TEMP/nudge-debug.p12" >> "$GITHUB_ENV"
+            echo "SIGNED_WITH_PROJECT_KEY=true" >> "$GITHUB_ENV"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "::warning::Signing secrets unavailable (pull request). The APK is built for checking only and will not be published."
           else
-            echo "::warning::No shared debug key configured; this APK uses a one-off key and cannot update a previous install."
+            echo "::error::Signing secrets NUDGE_DEBUG_KEYSTORE_B64 / NUDGE_DEBUG_KEYSTORE_PASSWORD are not set. See docs/SIGNING.md."
+            exit 1
           fi
 
       - name: Unit tests
@@ -52,6 +63,24 @@ jobs:
         env:
           NUDGE_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.NUDGE_DEBUG_KEYSTORE_PASSWORD }}
         run: gradle assembleDebug --stacktrace
+
+      - name: Remove decoded key from runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/nudge-debug.p12"
+
+      # Proves the APK carries the project certificate before anyone can download it.
+      - name: Verify APK signing certificate
+        if: env.SIGNED_WITH_PROJECT_KEY == 'true'
+        run: |
+          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner"
+          "$APKSIGNER" verify --print-certs app/build/outputs/apk/debug/app-debug.apk > certs.txt
+          cat certs.txt
+          ACTUAL=$(grep -m1 "certificate SHA-256 digest" certs.txt | awk '{print $NF}')
+          if [ "$ACTUAL" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "::error::APK certificate $ACTUAL does not match the project certificate $EXPECTED_CERT_SHA256. Not publishing."
+            exit 1
+          fi
+          echo "Signing certificate verified: $ACTUAL"
 
       - name: Name the APK
         run: |
@@ -76,7 +105,7 @@ jobs:
 
       # Publishing to GitHub Releases gives a plain .apk link you can open on the phone.
       - name: Publish phone download (GitHub Release)
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request' && env.SIGNED_WITH_PROJECT_KEY == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -89,6 +118,8 @@ jobs:
 
           **Install on your phone:** download nudge-debug-${{ github.run_number }}.apk below, open it, and allow your browser to install apps if asked.
           See docs/INSTALL_AND_TEST.md for the full guide and test checklist.
+
+          Signing certificate SHA-256: ${EXPECTED_CERT_SHA256} (verified in CI). Installs as an update over any earlier Nudge (debug) build with the same certificate.
 
           This is a test build: it is signed with a debug key and is not a Play Store release.
           EOF
