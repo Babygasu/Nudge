@@ -1,0 +1,98 @@
+name: Build debug APK
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      NUDGE_DEBUG_KEY_ALIAS: nudgedebug
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      # A shared debug key (stored as an encrypted GitHub secret) means every
+      # APK has the same signature, so new builds install as updates and keep
+      # your reminders and permissions. Without it, each build would need an uninstall.
+      - name: Prepare debug signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.NUDGE_DEBUG_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/nudge-debug.p12"
+            echo "NUDGE_DEBUG_KEYSTORE=$RUNNER_TEMP/nudge-debug.p12" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No shared debug key configured; this APK uses a one-off key and cannot update a previous install."
+          fi
+
+      - name: Unit tests
+        run: gradle test --stacktrace
+
+      - name: Build debug APK
+        env:
+          NUDGE_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.NUDGE_DEBUG_KEYSTORE_PASSWORD }}
+        run: gradle assembleDebug --stacktrace
+
+      - name: Name the APK
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/debug/app-debug.apk "out/nudge-debug-${{ github.run_number }}.apk"
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ github.run_number }}
+          path: "**/build/reports/tests/"
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nudge-debug-${{ github.run_number }}
+          path: out/*.apk
+          retention-days: 30
+
+      # Publishing to GitHub Releases gives a plain .apk link you can open on the phone.
+      - name: Publish phone download (GitHub Release)
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="build-${{ github.run_number }}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          PRERELEASE=""
+          if [ "$GITHUB_REF_NAME" != "main" ]; then PRERELEASE="--prerelease"; fi
+          cat > notes.md <<EOF
+          Debug build ${{ github.run_number }} from branch ${GITHUB_REF_NAME} (commit ${SHORT_SHA}).
+
+          **Install on your phone:** download nudge-debug-${{ github.run_number }}.apk below, open it, and allow your browser to install apps if asked.
+          See docs/INSTALL_AND_TEST.md for the full guide and test checklist.
+
+          This is a test build: it is signed with a debug key and is not a Play Store release.
+          EOF
+          gh release create "$TAG" out/*.apk \
+            --target "$GITHUB_SHA" \
+            --title "Nudge debug build ${{ github.run_number }} (${GITHUB_REF_NAME})" \
+            --notes-file notes.md $PRERELEASE

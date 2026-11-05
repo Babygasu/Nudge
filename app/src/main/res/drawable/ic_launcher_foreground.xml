@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Speech bubble with a dot: "something someone said, remembered". -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,32C66.7,32 77,41.4 77,53C77,64.6 66.7,74 54,74C50.9,74 47.9,73.4 45.2,72.4L35,77L37.9,67.6C34.2,63.8 31,58.7 31,53C31,41.4 41.3,32 54,32Z" />
+    <path
+        android:fillColor="#2F6F6A"
+        android:pathData="M54,47A6,6 0,1 1,53.99 47Z" />
+</vector>

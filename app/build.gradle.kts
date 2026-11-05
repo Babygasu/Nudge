@@ -1,0 +1,100 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
+}
+
+// CI run number makes every build's version higher than the last, so it installs as an update.
+val buildNumber = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
+
+android {
+    namespace = "com.babygasu.nudge"
+    compileSdk = 35
+
+    defaultConfig {
+        applicationId = "com.babygasu.nudge"
+        minSdk = 26
+        targetSdk = 35
+        versionCode = buildNumber
+        versionName = "0.1.$buildNumber"
+        resValue("string", "app_name", "Nudge")
+    }
+
+    signingConfigs {
+        getByName("debug") {
+            // Shared debug key provided by CI (see .github/workflows/android.yml).
+            val keystorePath = System.getenv("NUDGE_DEBUG_KEYSTORE")
+            if (keystorePath != null && file(keystorePath).exists()) {
+                storeFile = file(keystorePath)
+                storeType = "pkcs12"
+                storePassword = System.getenv("NUDGE_DEBUG_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("NUDGE_DEBUG_KEY_ALIAS") ?: "nudgedebug"
+                keyPassword = System.getenv("NUDGE_DEBUG_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+            resValue("string", "app_name", "Nudge (debug)")
+        }
+        release {
+            isMinifyEnabled = false
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
+
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
+}
+
+dependencies {
+    implementation(project(":core:intelligence"))
+
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.activity.compose)
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.core)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.sqlite.ktx)
+    implementation(libs.sqlcipher.android)
+    implementation(libs.kotlinx.coroutines.android)
+
+    debugImplementation(libs.androidx.compose.ui.tooling)
+    testImplementation(libs.junit)
+}
