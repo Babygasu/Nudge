@@ -56,6 +56,9 @@ Use Share → Nudge or the paste screen (✎ on Today) for these:
 | 4.2 | Tap the same test sample twice | Still one reminder |
 | 4.3 | Two missed calls from the same person | One *Call back* reminder |
 | 4.4 | Share "Please review the proposal" and "Please submit the proposal" | **Two** reminders (different actions) |
+| ★4.5 | Share "Please submit the project report by Monday at 10 AM.", then "I'm still waiting for the project report. We cannot proceed until you submit it." | **One** reminder *Submit the project report*, priority raised, deadline still **Monday 10:00** |
+| ★4.6 | Share "Please send the project report by Friday", then "Please submit the project report by Monday" | Second one is saved but marked **Possible duplicate**. Opening it shows *Merge / Keep both*. Merge leaves one reminder due Monday |
+| 4.7 | Share "Please send the expense report" after 4.5 | A **separate** reminder (different report) |
 
 ## 5. Battery and background
 | # | Test | Expected |

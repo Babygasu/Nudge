@@ -1,5 +1,6 @@
 package com.babygasu.nudge.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -7,6 +8,7 @@ import com.babygasu.nudge.intelligence.DuePrecision
 import com.babygasu.nudge.intelligence.Priority
 import com.babygasu.nudge.intelligence.ReminderKind
 import com.babygasu.nudge.intelligence.Signal
+import com.babygasu.nudge.intelligence.TaskSnapshot
 
 enum class ReminderStatus { OPEN, DONE, DISMISSED }
 
@@ -46,9 +48,27 @@ data class Reminder(
     /** Space-separated tokens derived from the title, used to avoid duplicates. */
     val matchTokens: String = "",
     val lastNotifiedAt: Long? = null,
+    /** Set when Nudge thinks this may be the same task as another reminder and wants the user to decide. (DB v2) */
+    val possibleDuplicateOf: Long? = null,
+    /** The user chose "Keep both": never suggest a merge for this reminder again. (DB v2) */
+    @ColumnInfo(defaultValue = "0") val duplicateReviewed: Boolean = false,
 )
 
 val Reminder.effectiveTime: Long? get() = snoozedUntil ?: dueAt
+
+fun Reminder.toSnapshot(): TaskSnapshot = TaskSnapshot(
+    id = id,
+    title = title,
+    kind = kind,
+    tokens = matchTokenSet,
+    senderKey = senderKey,
+    dueAt = dueAt,
+    priority = priority,
+    priorityByUser = priorityByUser,
+    signals = signalSet,
+    createdAt = createdAt,
+    userWritten = origin == Origin.MANUAL,
+)
 val Reminder.isOpen: Boolean get() = status == ReminderStatus.OPEN
 val Reminder.signalSet: Set<Signal>
     get() = signals.split(',').mapNotNull { code -> Signal.entries.firstOrNull { it.name == code } }.toSet()

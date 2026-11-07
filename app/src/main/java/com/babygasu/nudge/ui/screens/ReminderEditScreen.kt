@@ -78,6 +78,7 @@ fun ReminderEditScreen(vm: NudgeViewModel, id: Long, initialTitle: String?, onBa
         else remember { mutableStateOf(null) }
     val existing = existingState.value
     val now by vm.now.collectAsStateWithLifecycle()
+    val all by vm.reminders.collectAsStateWithLifecycle()
     val zone = ZoneId.systemDefault()
 
     var title by remember(existing?.id) { mutableStateOf(existing?.title ?: initialTitle.orEmpty()) }
@@ -195,6 +196,16 @@ fun ReminderEditScreen(vm: NudgeViewModel, id: Long, initialTitle: String?, onBa
             )
 
             if (existing != null) {
+                val similar = existing.possibleDuplicateOf?.let { tid ->
+                    all.firstOrNull { it.id == tid && it.status == ReminderStatus.OPEN }
+                }
+                if (similar != null && existing.status == ReminderStatus.OPEN) {
+                    DuplicateCard(
+                        similar = similar,
+                        onMerge = { vm.mergeInto(existing.id, similar.id); onBack() },
+                        onKeepBoth = { vm.keepSeparate(existing.id) },
+                    )
+                }
                 if (existing.status == ReminderStatus.OPEN) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { vm.complete(existing.id); onBack() }) { Text("Mark done") }
@@ -295,6 +306,33 @@ private fun snoozeOptions(zone: ZoneId): List<Pair<String, Long>> {
         "3 hours" to now + 3 * 60 * 60_000L,
         "Tomorrow morning" to tomorrowMorning,
     )
+}
+
+@Composable
+private fun DuplicateCard(similar: Reminder, onMerge: () -> Unit, onKeepBoth: () -> Unit) {
+    Card(
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Is this the same task?", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "It looks similar to “${similar.title}”, but Nudge isn't sure, so it hasn't merged them.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                "Merging keeps “${similar.title}” and its deadline (unless this one states a new deadline), " +
+                    "takes the higher priority, and removes this copy.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onMerge) { Text("Merge") }
+                OutlinedButton(onClick = onKeepBoth) { Text("Keep both") }
+            }
+        }
+    }
 }
 
 @Composable

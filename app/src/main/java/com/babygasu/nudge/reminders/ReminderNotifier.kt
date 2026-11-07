@@ -100,9 +100,14 @@ class ReminderNotifier(private val context: Context) {
         val heading = when (outcome) {
             is IngestOutcome.Created -> "Nudge noticed something"
             is IngestOutcome.Merged -> if (outcome.escalated) "Still waiting on you" else return
+            is IngestOutcome.NeedsConfirmation -> "Same as an existing reminder?"
         }
         val due = Format.due(r.dueAt, r.duePrecision, System.currentTimeMillis())
-        val line = listOfNotNull(r.priority.label, due, r.sourceApp).joinToString(" · ")
+        val line = if (outcome is IngestOutcome.NeedsConfirmation) {
+            "Looks similar to “${outcome.similarTo.title}”. Tap to merge or keep both."
+        } else {
+            listOfNotNull(r.priority.label, due, r.sourceApp).joinToString(" · ")
+        }
         val notification = NotificationCompat.Builder(context, Channels.DETECTED)
             .setSmallIcon(R.drawable.ic_stat_nudge)
             .setContentTitle("$heading: ${r.title}")

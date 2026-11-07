@@ -41,6 +41,15 @@ internal object Rules {
     /** "...until you submit the document" → "submit the document". */
     val UNTIL_YOU = Regex("""\buntil\s+(?:you|u)\s+(\p{L}+\s+(?:the|your|this|that|our|my|an?)\s+[\p{L}\p{N}-]+(?:\s+[\p{L}\p{N}-]+)?)""")
 
+    /** "...until you submit it" → "submit" (the "it" is resolved from earlier in the message). */
+    val UNTIL_YOU_PRONOUN = Regex("""\buntil\s+(?:you|u)\s+(\p{L}+)\s+(?:it|this|that|them)\b""")
+
+    /** Candidate antecedents for "it": "the project report", "your signed contract". */
+    val NOUN_PHRASE = Regex("""\b(?:the|your|my|our|this|that)\s+[\p{L}\p{N}-]+(?:\s+[\p{L}\p{N}-]+){0,2}""", RegexOption.IGNORE_CASE)
+
+    /** A standalone pronoun in a title that should point at something concrete. */
+    val TITLE_PRONOUN = Regex("""\bit\b""", RegexOption.IGNORE_CASE)
+
     /** "...expecting the report yesterday" → "the report yesterday" (cleaned later). */
     val WAITING_OBJECT = Regex("""\b(?:expecting|waiting\s+for|waiting\s+on|update\s+on|received|receive|without)\s+((?:the|your|that|this|my|our|an?)\s+[\p{L}\p{N}-]+(?:\s+[\p{L}\p{N}-]+){0,2})""")
 
@@ -69,6 +78,30 @@ internal object Vocabulary {
         "proofread", "edit", "create", "make", "do", "start", "post", "ship", "install", "test", "provide",
         "give", "lend", "help", "fetch", "grab", "remember", "let", "decide", "choose", "report", "call-back",
     )
+
+    /**
+     * Verbs that describe the same obligation when applied to the same thing. "Send the report",
+     * "submit the report" and "get the report to Ama" are one task; "review the report" is another.
+     * A verb may belong to several families ("get" = deliver or buy).
+     */
+    private val ACTION_FAMILIES: List<Set<String>> = listOf(
+        setOf("send", "resend", "submit", "deliver", "share", "forward", "email", "mail", "provide", "give",
+            "upload", "post", "ship", "file", "get", "bring", "return", "hand"),
+        setOf("review", "check", "proofread", "look", "read", "go"),
+        setOf("call", "ring", "phone", "contact", "ping", "message", "text", "whatsapp"),
+        setOf("reply", "respond", "tell", "inform", "notify", "let", "confirm", "answer"),
+        setOf("pay", "settle", "transfer"),
+        setOf("book", "schedule", "reschedule", "arrange", "organise", "organize", "plan", "set"),
+        setOf("prepare", "draft", "write", "create", "make", "finish", "complete", "finalise", "finalize", "do"),
+        setOf("buy", "order", "get", "pick", "collect", "fetch", "grab"),
+        setOf("sign", "approve"),
+        setOf("attend", "join", "come", "meet"),
+        setOf("fix", "update", "edit", "correct"),
+        setOf("renew", "register", "apply"),
+    )
+
+    fun sameActionFamily(a: String, b: String): Boolean =
+        a == b || ACTION_FAMILIES.any { a in it && b in it }
 
     /** Words that start a noun phrase; "Need the report" → "Get the report to …". */
     val OBJECT_STARTERS: Set<String> = setOf("the", "your", "a", "an", "this", "that", "these", "those", "their")

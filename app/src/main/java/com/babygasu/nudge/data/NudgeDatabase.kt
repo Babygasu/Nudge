@@ -9,6 +9,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
@@ -37,6 +39,10 @@ interface ReminderDao {
 
     @Query("DELETE FROM reminders WHERE status != 'OPEN'")
     suspend fun deleteClosed(): Int
+
+    /** Re-points (or clears, with null) "possible duplicate of" links when a reminder goes away. */
+    @Query("UPDATE reminders SET possibleDuplicateOf = :newId WHERE possibleDuplicateOf = :oldId")
+    suspend fun repointDuplicateLinks(oldId: Long, newId: Long?)
 }
 
 @Dao
@@ -69,7 +75,7 @@ interface MonitoredAppDao {
 /** Encrypted at rest with SQLCipher; the passphrase is protected by the Android Keystore. */
 @Database(
     entities = [Reminder::class, ReminderEvent::class, MonitoredApp::class],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class NudgeDatabase : RoomDatabase() {
@@ -80,10 +86,20 @@ abstract class NudgeDatabase : RoomDatabase() {
     companion object {
         const val NAME = "nudge.db"
 
+        /** v2: duplicate-confirmation fields. Existing reminders are kept. */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE reminders ADD COLUMN possibleDuplicateOf INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE reminders ADD COLUMN duplicateReviewed INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun build(context: Context, passphrase: ByteArray): NudgeDatabase {
             System.loadLibrary("sqlcipher")
+            // No destructive fallback: a missing migration must fail loudly, never silently erase reminders.
             return Room.databaseBuilder(context, NudgeDatabase::class.java, NAME)
                 .openHelperFactory(SupportOpenHelperFactory(passphrase))
+                .addMigrations(MIGRATION_1_2)
                 .build()
         }
     }

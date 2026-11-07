@@ -16,6 +16,8 @@ internal data class Detected(
     val type: ActionType,
     val confidence: Double,
     val time: TimeExpression?,
+    /** Message text before this sentence, used to resolve "it" ("The report is late. Please send it."). */
+    val preceding: String = "",
 )
 
 /**
@@ -59,8 +61,11 @@ class LocalEngine(private val minConfidence: Double = DEFAULT_MIN_CONFIDENCE) {
         }
         val messageTime = TimeParser.parse(text, input.now, input.dayFirstDates)
 
-        val detected = TextTools.sentences(text)
-            .mapNotNull { detect(it, perspective, input) }
+        val sentences = TextTools.sentences(text)
+        val detected = sentences
+            .mapIndexedNotNull { i, s ->
+                detect(s, perspective, input)?.copy(preceding = sentences.take(i).joinToString(" "))
+            }
             .take(MAX_ACTIONS_PER_MESSAGE)
         val candidates = detected
             .map { build(it, perspective, input, them, senderTokens, messageSignals, messageTime) }
@@ -200,7 +205,8 @@ internal object Titles {
     private val OBJECT_STOP = setOf(
         "yesterday", "today", "tomorrow", "from", "by", "yet", "already", "since", "last", "this", "on", "at",
         "before", "until", "and", "or", "but", "so", "for", "to", "in", "please", "asap", "now", "soon", "again",
-        "we", "i", "you", "is", "was",
+        "we", "i", "you", "is", "was", "of", "with", "about", "it", "will", "are", "has", "have", "be", "can", "cannot",
+        "can't", "should", "must", "needs", "need",
     )
 
     fun forAction(d: Detected, them: String, perspective: Perspective): String {
@@ -218,10 +224,23 @@ internal object Titles {
                     else -> "Follow up with $them: they'll $rest"
                 }
             }
-            ActionType.USER_COMMITMENT -> selfTask(cleaned, them, perspective)
-            ActionType.REQUEST -> request(cleaned, them)
+            ActionType.USER_COMMITMENT -> selfTask(cleaned, them, perspective, d.preceding)
+            ActionType.REQUEST -> resolvePronoun(request(cleaned, them), d.preceding)
         }
         return TextTools.finish(raw) ?: fallback(d.type, them)
+    }
+
+    /** Most recent concrete noun phrase in [text], e.g. "the project report". */
+    fun antecedent(text: String): String? =
+        Rules.NOUN_PHRASE.findAll(text).toList().asReversed()
+            .firstNotNullOfOrNull { cleanObject(it.value.lowercase(Locale.ROOT)) }
+            ?.let(::swapPossessives)
+
+    /** "Send it" + earlier "the project report" → "Send the project report". */
+    private fun resolvePronoun(title: String, preceding: String): String {
+        if (preceding.isBlank() || !Rules.TITLE_PRONOUN.containsMatchIn(title)) return title
+        val noun = antecedent(preceding) ?: return title
+        return title.replaceFirst(Rules.TITLE_PRONOUN, noun)
     }
 
     fun commitmentHasAction(lead: String): Boolean =
@@ -231,8 +250,13 @@ internal object Titles {
         Rules.UNTIL_YOU.find(lowerAll)?.let { m ->
             TextTools.finish(swapPossessives(TextTools.trimTrailing(m.groupValues[1])))?.let { return it }
         }
-        val who = if (them == THEM) "Someone" else them
         val obj = Rules.WAITING_OBJECT.find(lowerAll)?.groupValues?.get(1)?.let(::cleanObject)
+        // "...until you submit it": the action, with "it" resolved to what they're waiting for.
+        Rules.UNTIL_YOU_PRONOUN.find(lowerAll)?.let { m ->
+            val subject = obj ?: antecedent(lowerAll.substring(0, m.range.first))
+            if (subject != null) TextTools.finish("${m.groupValues[1]} ${swapPossessives(subject)}")?.let { return it }
+        }
+        val who = if (them == THEM) "Someone" else them
         val raw = when {
             obj != null -> "$who is waiting for ${swapPossessives(obj)}"
             them == THEM -> "Someone is waiting on you"
@@ -244,9 +268,9 @@ internal object Titles {
     private fun commitmentRest(s: String): String =
         TextTools.trimTrailing(s.trim().replace(Rules.COMMITMENT_PREFIX, "").trim())
 
-    private fun selfTask(cleaned: String, them: String, perspective: Perspective): String {
+    private fun selfTask(cleaned: String, them: String, perspective: Perspective, preceding: String): String {
         var t = cleaned.trim().replace(Rules.COMMITMENT_PREFIX, "").replace(Rules.SELF_PREFIX, "").trim()
-        t = TextTools.trimTrailing(t)
+        t = resolvePronoun(TextTools.trimTrailing(t), preceding)
         if (perspective == Perspective.USER && them != THEM && Rules.VAGUE.containsMatchIn(t)) t = "$t ($them)"
         return t
     }

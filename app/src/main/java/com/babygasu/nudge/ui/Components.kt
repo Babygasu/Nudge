@@ -87,6 +87,7 @@ fun ReminderRow(r: Reminder, now: Long, onClick: () -> Unit, onToggleDone: () ->
                         ReminderStatus.DISMISSED -> "Dismissed"
                         ReminderStatus.OPEN -> null
                     },
+                    "Possible duplicate".takeIf { open && r.possibleDuplicateOf != null },
                     r.sourceApp?.takeIf { r.origin != Origin.MANUAL },
                     r.senderDisplay,
                 ).joinToString(" · ")

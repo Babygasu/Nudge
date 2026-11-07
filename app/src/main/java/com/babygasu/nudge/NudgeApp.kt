@@ -16,7 +16,10 @@ class NudgeApp : Application() {
         Channels.create(this)
         ReconcileWorker.schedule(this)
         // Re-arm alarms whenever the process starts (cheap, and covers missed broadcasts).
-        container.appScope.launch { container.reminders.rescheduleAll() }
+        container.appScope.launch {
+            container.reminders.rescheduleAll()
+            container.reminders.flagPossibleDuplicates()
+        }
     }
 }
 

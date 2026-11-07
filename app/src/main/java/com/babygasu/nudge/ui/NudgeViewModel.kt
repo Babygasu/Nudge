@@ -44,6 +44,8 @@ class NudgeViewModel(private val c: AppContainer) : ViewModel() {
     fun dismiss(id: Long) = io { c.reminders.dismiss(id) }
     fun delete(id: Long) = io { c.reminders.delete(id) }
     fun snooze(id: Long, until: Long) = io { c.reminders.snooze(id, until) }
+    fun mergeInto(sourceId: Long, targetId: Long) = io { c.reminders.mergeInto(sourceId, targetId) }
+    fun keepSeparate(id: Long) = io { c.reminders.keepSeparate(id) }
     fun deleteClosed() = io { c.reminders.deleteClosed() }
     fun deleteAllData() = io { c.deleteAllData() }
 

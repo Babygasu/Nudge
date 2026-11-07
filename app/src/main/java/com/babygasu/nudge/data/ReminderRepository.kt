@@ -1,9 +1,14 @@
 package com.babygasu.nudge.data
 
 import com.babygasu.nudge.intelligence.Candidate
-import com.babygasu.nudge.intelligence.ReminderKind
+import com.babygasu.nudge.intelligence.DuePrecision
+import com.babygasu.nudge.intelligence.DuplicateMatcher
+import com.babygasu.nudge.intelligence.MatchDecision
+import com.babygasu.nudge.intelligence.MergePolicy
 import com.babygasu.nudge.intelligence.Signal
 import com.babygasu.nudge.intelligence.Similarity
+import com.babygasu.nudge.intelligence.TaskSnapshot
+import com.babygasu.nudge.intelligence.toSnapshot
 import com.babygasu.nudge.reminders.ReminderNotifier
 import com.babygasu.nudge.reminders.ReminderScheduler
 import com.babygasu.nudge.security.SafeLog
@@ -27,6 +32,9 @@ sealed interface IngestOutcome {
 
     data class Created(override val reminder: Reminder) : IngestOutcome
     data class Merged(override val reminder: Reminder, val escalated: Boolean) : IngestOutcome
+
+    /** Saved separately because it *might* be the same as [similarTo]; the user is asked. */
+    data class NeedsConfirmation(override val reminder: Reminder, val similarTo: Reminder) : IngestOutcome
 }
 
 class ReminderRepository(
@@ -93,6 +101,7 @@ class ReminderRepository(
         notifier.cancel(id)
         dao.delete(id)
         events.deleteFor(id)
+        dao.repointDuplicateLinks(id, null)
     }
 
     suspend fun deleteClosed(): Int = mutex.withLock {
@@ -130,7 +139,10 @@ class ReminderRepository(
     }
 
     /**
-     * Saves detected candidates, merging any that describe an obligation Nudge already tracks.
+     * Saves detected candidates. Each one is compared with open reminders (DuplicateMatcher):
+     *  - confident match → the existing reminder is updated (MergePolicy), nothing new is created;
+     *  - uncertain match → a new reminder is saved but flagged, and the user decides whether to merge;
+     *  - no match → a new reminder.
      * Each save is read back to verify it before the caller drops the source text.
      */
     suspend fun ingest(candidates: List<Candidate>, source: SourceMeta): List<IngestOutcome> = mutex.withLock {
@@ -138,27 +150,12 @@ class ReminderRepository(
         val now = clock()
         for (c in candidates) {
             val open = dao.open()
-            val duplicate = findDuplicate(c, source.senderKey, open, now)
-            if (duplicate != null) {
-                val escalated = Signal.ESCALATION in c.signals || Signal.MISSED_CALL in c.signals
-                var priority = maxOf(duplicate.priority, c.priority)
-                if (escalated && priority == duplicate.priority) priority = priority.raised()
-                if (duplicate.priorityByUser) priority = duplicate.priority
-                val candidateDue = c.dueAt?.toInstant()?.toEpochMilli()
-                val due = listOfNotNull(duplicate.dueAt, candidateDue).minOrNull()
-                val signals = (duplicate.signalSet + c.signals + Signal.MERGED).joinToString(",") { it.name }
-                val merged = duplicate.copy(
-                    priority = priority,
-                    dueAt = due,
-                    lastNotifiedAt = if (due != duplicate.dueAt) null else duplicate.lastNotifiedAt,
-                    signals = signals,
-                    updatedAt = now,
-                )
-                dao.update(merged)
-                log(merged.id, if (escalated) "escalated" else "merged")
-                val saved = dao.get(merged.id) ?: continue
-                scheduler.schedule(saved)
-                outcomes += IngestOutcome.Merged(saved, escalated)
+            val incoming = c.toSnapshot(source.senderKey)
+            val decision = DuplicateMatcher.decide(incoming, open.map { it.toSnapshot() }, now)
+            if (decision is MatchDecision.Merge) {
+                val target = open.first { it.id == decision.targetId }
+                val saved = applyMerge(target, incoming, now) ?: continue
+                outcomes += IngestOutcome.Merged(saved, Signal.ESCALATION in c.signals || Signal.BLOCKING in c.signals || Signal.MISSED_CALL in c.signals)
             } else {
                 val reminder = Reminder(
                     title = c.title,
@@ -177,6 +174,7 @@ class ReminderRepository(
                     signals = c.signals.joinToString(",") { it.name },
                     confidence = c.confidence,
                     matchTokens = c.matchTokens.joinToString(" "),
+                    possibleDuplicateOf = (decision as? MatchDecision.Confirm)?.targetId,
                 )
                 val id = dao.insert(reminder)
                 val saved = dao.get(id)
@@ -184,34 +182,82 @@ class ReminderRepository(
                     SafeLog.error("reminders", "save_not_verified")
                     continue
                 }
-                log(id, "created_detected")
+                log(id, if (saved.possibleDuplicateOf != null) "created_possible_duplicate" else "created_detected")
                 scheduler.schedule(saved)
-                outcomes += IngestOutcome.Created(saved)
+                val target = saved.possibleDuplicateOf?.let { tid -> open.firstOrNull { it.id == tid } }
+                outcomes += if (target != null) IngestOutcome.NeedsConfirmation(saved, target) else IngestOutcome.Created(saved)
             }
         }
         outcomes
     }
 
-    private fun findDuplicate(c: Candidate, senderKey: String?, open: List<Reminder>, now: Long): Reminder? {
-        val recent = open.filter { now - it.createdAt < DUPLICATE_WINDOW_MS }
-        return recent.firstOrNull { r ->
-            val sameSender = senderKey != null && r.senderKey == senderKey
-            val bothFollowUps = (c.kind == ReminderKind.FOLLOW_UP) == (r.kind == ReminderKind.FOLLOW_UP)
-            when {
-                !bothFollowUps -> false
-                c.kind == ReminderKind.CALL_BACK && r.kind == ReminderKind.CALL_BACK -> sameSender
-                sameSender -> Similarity.isSameTask(c.matchTokens, r.matchTokenSet)
-                senderKey == null && r.senderKey == null ->
-                    c.kind == r.kind && Similarity.isSameTask(c.matchTokens, r.matchTokenSet, threshold = 0.8)
-                else -> false
+    /** User confirmed: fold [sourceId] into [targetId] and remove [sourceId]. */
+    suspend fun mergeInto(sourceId: Long, targetId: Long) = mutex.withLock {
+        val source = dao.get(sourceId) ?: return@withLock
+        val target = dao.get(targetId) ?: return@withLock
+        if (target.status != ReminderStatus.OPEN || sourceId == targetId) return@withLock
+        applyMerge(target, source.toSnapshot(), clock()) ?: return@withLock
+        scheduler.cancel(sourceId)
+        notifier.cancel(sourceId)
+        dao.delete(sourceId)
+        events.deleteFor(sourceId)
+        dao.repointDuplicateLinks(sourceId, targetId)
+        dao.get(targetId)?.let { if (it.possibleDuplicateOf == targetId) dao.update(it.copy(possibleDuplicateOf = null)) }
+        log(targetId, "merged_by_user")
+    }
+
+    /** User chose "Keep both": stop suggesting a merge for this reminder. */
+    suspend fun keepSeparate(id: Long) = mutex.withLock {
+        val r = dao.get(id) ?: return@withLock
+        dao.update(r.copy(possibleDuplicateOf = null, duplicateReviewed = true, updatedAt = clock()))
+        log(id, "kept_separate")
+    }
+
+    /**
+     * Looks for likely duplicates among reminders that already exist (e.g. created before this
+     * matching existed) and flags them for the user. Never merges existing reminders on its own.
+     */
+    suspend fun flagPossibleDuplicates() = mutex.withLock {
+        val now = clock()
+        val open = dao.open().sortedBy { it.createdAt }
+        for ((index, r) in open.withIndex()) {
+            if (r.duplicateReviewed || r.possibleDuplicateOf != null || r.origin == Origin.MANUAL && r.matchTokens.isBlank()) continue
+            val older = open.subList(0, index).map { it.toSnapshot() }
+            when (val d = DuplicateMatcher.decide(r.toSnapshot(), older, now)) {
+                is MatchDecision.Merge -> dao.update(r.copy(possibleDuplicateOf = d.targetId))
+                is MatchDecision.Confirm -> dao.update(r.copy(possibleDuplicateOf = d.targetId))
+                MatchDecision.NoMatch -> Unit
             }
         }
+    }
+
+    private suspend fun applyMerge(target: Reminder, incoming: TaskSnapshot, now: Long): Reminder? {
+        val m = MergePolicy.merge(target.toSnapshot(), incoming)
+        val dueChanged = m.dueAt != target.dueAt
+        dao.update(
+            target.copy(
+                title = m.title,
+                matchTokens = m.tokens.joinToString(" "),
+                signals = m.signals.joinToString(",") { it.name },
+                priority = m.priority,
+                dueAt = m.dueAt,
+                duePrecision = if (dueChanged) DuePrecision.EXACT else target.duePrecision,
+                snoozedUntil = if (dueChanged) null else target.snoozedUntil,
+                lastNotifiedAt = if (dueChanged) null else target.lastNotifiedAt,
+                updatedAt = now,
+            ),
+        )
+        log(target.id, if (m.escalated) "escalated" else "merged")
+        val saved = dao.get(target.id) ?: return null
+        scheduler.schedule(saved)
+        return saved
     }
 
     private suspend fun changeStatus(id: Long, status: ReminderStatus, event: String) = mutex.withLock {
         val r = dao.get(id) ?: return@withLock
         val now = clock()
-        dao.update(r.copy(status = status, completedAt = now, updatedAt = now))
+        dao.update(r.copy(status = status, completedAt = now, updatedAt = now, possibleDuplicateOf = null))
+        dao.repointDuplicateLinks(id, null)
         log(id, if (status == ReminderStatus.DISMISSED && r.origin != Origin.MANUAL) "dismissed_detected" else event)
         scheduler.cancel(id)
         notifier.cancel(id)
@@ -221,7 +267,4 @@ class ReminderRepository(
         events.insert(ReminderEvent(reminderId = id, type = type, at = clock()))
     }
 
-    private companion object {
-        const val DUPLICATE_WINDOW_MS = 21L * 24 * 60 * 60 * 1000
-    }
 }

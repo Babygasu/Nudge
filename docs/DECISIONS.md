@@ -2,6 +2,17 @@
 
 Short records of significant technical decisions. Newest first.
 
+## D-008 · Scored duplicate matching with user confirmation (2026-11-07)
+Device testing found a follow-up merged into the wrong (older) reminder and "send"/"submit" treated as different
+tasks. Root causes: first-match selection, exact-verb comparison, and an unresolved "it". Replaced with
+`DuplicateMatcher`: score = subject × action family × sender × deadline agreement, with hard vetoes for different
+action families, different known senders and incompatible kinds. ≥0.7 with a clear winner → merge; 0.4–0.7 or
+ambiguous → save separately, flagged "Possible duplicate", and the user chooses Merge or Keep both.
+`MergePolicy` keeps the original deadline unless a new one is stated, raises priority on escalation (never over a
+user-set priority), and never replaces user-written titles. DB v2 adds `possibleDuplicateOf` and
+`duplicateReviewed` (migration, no data loss). At start-up, existing reminders are scanned and likely duplicates are
+flagged (never auto-merged).
+
 ## D-007 · Core and full build variants (2026-11-07)
 Play Protect's enhanced fraud protection blocked a browser install of the APK because it declares a notification
 listener. Rather than remove or disguise the feature, the app now has a `capability` flavor dimension:
