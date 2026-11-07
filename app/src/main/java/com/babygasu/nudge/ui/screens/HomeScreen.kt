@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.babygasu.nudge.Features
 import com.babygasu.nudge.data.Reminder
 import com.babygasu.nudge.ui.HomeSections
 import com.babygasu.nudge.ui.InfoCard
@@ -82,7 +83,9 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item { Greeting(now, sections) }
-            if (!accessGranted) {
+            if (!Features.detection) {
+                // Nudge Core: no banner nagging about a capability this build doesn't have.
+            } else if (!accessGranted) {
                 item {
                     InfoCard(
                         "Message detection is off",

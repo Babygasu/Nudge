@@ -20,7 +20,29 @@ android {
         targetSdk = 35
         versionCode = buildNumber
         versionName = "0.1.$buildNumber"
-        resValue("string", "app_name", "Nudge")
+    }
+
+    // Two capability variants (docs/PLAY_PROTECT.md):
+    //  - full: complete Nudge, including notification access and the floating bubble.
+    //  - core: no notification listener, no overlay, no package visibility. Dashboard, manual and
+    //    shared/pasted reminders, offline scheduling and privacy controls only. Installable from a
+    //    browser even where Play Protect blocks sideloaded apps that declare notification access.
+    flavorDimensions += "capability"
+    productFlavors {
+        create("full") {
+            dimension = "capability"
+            buildConfigField("boolean", "DETECTION_AVAILABLE", "true")
+            buildConfigField("boolean", "BUBBLE_AVAILABLE", "true")
+            manifestPlaceholders["appName"] = "Nudge"
+        }
+        create("core") {
+            dimension = "capability"
+            applicationIdSuffix = ".core"
+            versionNameSuffix = "-core"
+            buildConfigField("boolean", "DETECTION_AVAILABLE", "false")
+            buildConfigField("boolean", "BUBBLE_AVAILABLE", "false")
+            manifestPlaceholders["appName"] = "Nudge Core"
+        }
     }
 
     // Debug builds use Android's standard auto-generated debug key. Stable signing is deferred
@@ -29,10 +51,11 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
-            versionNameSuffix = "-debug"
-            resValue("string", "app_name", "Nudge (debug)")
+            versionNameSuffix = "-dev"
+            manifestPlaceholders["labelSuffix"] = " (dev)"
         }
         release {
+            manifestPlaceholders["labelSuffix"] = ""
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }

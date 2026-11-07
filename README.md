@@ -10,7 +10,8 @@ reminders. It works entirely on your phone.
 
 ## Install a test build
 Open **[Releases](https://github.com/Babygasu/Nudge/releases)** on your Android phone and download the
-newest `nudge-dev-N.apk` (development builds, for testing only). Full guide and test checklist: **[docs/INSTALL_AND_TEST.md](docs/INSTALL_AND_TEST.md)**.
+newest `nudge-core-dev-N.apk` (development builds, for testing only). The full build with message detection
+(`nudge-full-dev-N.apk`) is installed via ADB; see [docs/PLAY_PROTECT.md](docs/PLAY_PROTECT.md). Full guide and test checklist: **[docs/INSTALL_AND_TEST.md](docs/INSTALL_AND_TEST.md)**.
 
 ## What works in Phase 1
 - Onboarding that explains every permission; every permission can be skipped

@@ -31,6 +31,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         // The bubble can only be (re)started while Nudge is in the foreground.
+        if (!Features.bubble) return
         lifecycleScope.launch {
             if (container.settings.current().bubbleEnabled) BubbleService.start(this@MainActivity)
         }

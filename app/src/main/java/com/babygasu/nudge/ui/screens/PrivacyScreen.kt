@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.babygasu.nudge.Features
 import com.babygasu.nudge.capture.KnownApps
 import com.babygasu.nudge.data.ReminderStatus
 import com.babygasu.nudge.ui.InfoCard
@@ -53,7 +54,7 @@ fun PrivacyScreen(vm: NudgeViewModel) {
     var confirmWipe by remember { mutableStateOf(false) }
     var confirmClosed by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { vm.listInstalledApps(KnownApps.installed(context)) }
+    LaunchedEffect(Unit) { if (Features.detection) vm.listInstalledApps(KnownApps.installed(context)) }
 
     val transparent = ListItemDefaults.colors(containerColor = Color.Transparent)
 
@@ -74,6 +75,21 @@ fun PrivacyScreen(vm: NudgeViewModel) {
             }
 
             item { SectionHeader("Message detection") }
+            if (!Features.detection) {
+                item {
+                    ListItem(
+                        colors = transparent,
+                        headlineContent = { Text("Not included in Nudge Core") },
+                        supportingContent = {
+                            Text(
+                                "This build has no notification-listener component, so it can't read any notifications, " +
+                                    "even if asked. Text you share or paste is analysed on the phone and then discarded.",
+                            )
+                        },
+                    )
+                }
+            }
+            if (Features.detection) {
             item {
                 ListItem(
                     colors = transparent,
@@ -133,6 +149,7 @@ fun PrivacyScreen(vm: NudgeViewModel) {
                     },
                 )
             }
+            } // end detection-only section
 
             item { SectionHeader("Processing") }
             item {

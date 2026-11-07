@@ -2,6 +2,14 @@
 
 Short records of significant technical decisions. Newest first.
 
+## D-007 · Core and full build variants (2026-11-07)
+Play Protect's enhanced fraud protection blocked a browser install of the APK because it declares a notification
+listener. Rather than remove or disguise the feature, the app now has a `capability` flavor dimension:
+**full** (unchanged, includes listener and bubble) and **core** (no listener, overlay, foreground-special-use or
+package queries in its manifest). The UI hides what a variant lacks. CI audits both APKs and fails on any high-risk
+permission, on INTERNET, or if core gains a sensitive capability. Full builds will be tested via ADB, and later via
+a Play internal testing track. Details: PLAY_PROTECT.md.
+
 ## D-006 · Standard debug signing for development builds (2026-11-05)
 The product owner chose zero-configuration testing over update continuity. CI now uses Android's auto-generated
 debug key: no secrets, no keystore in GitHub. The cost, accepted: certificates can differ between builds, so an

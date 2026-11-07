@@ -36,13 +36,34 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.babygasu.nudge.Features
 import com.babygasu.nudge.capture.KnownApps
 import com.babygasu.nudge.ui.InfoCard
 import com.babygasu.nudge.ui.NudgeViewModel
 import com.babygasu.nudge.ui.Perms
 import com.babygasu.nudge.ui.rememberResumeTick
 
-private const val STEPS = 6
+private enum class Step { WELCOME, NOTIFICATIONS, DETECTION, APPS, SENDER, CORE_INFO, TIMING }
+
+@Composable
+private fun ColumnScope.CoreInfoStep() {
+    Heading(
+        "This is Nudge Core",
+        "This test version leaves out automatic message detection, so it needs no access to your notifications.",
+    )
+    InfoCard(
+        "What you can test",
+        "• Add, edit, snooze and complete reminders\n" +
+            "• On-time reminders that work offline and after a restart\n" +
+            "• Share → Nudge or paste a message: Nudge's on-device understanding suggests reminders\n" +
+            "• The Privacy Centre",
+    )
+    Text(
+        "Automatic detection from WhatsApp, email and missed calls is in the full version of Nudge.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
 
 /**
  * Every step explains what the permission is for and can be skipped. Nudge stays useful with
@@ -50,26 +71,36 @@ private const val STEPS = 6
  */
 @Composable
 fun OnboardingScreen(vm: NudgeViewModel) {
-    var step by remember { mutableIntStateOf(0) }
-    val next: () -> Unit = { if (step < STEPS - 1) step++ else vm.finishOnboarding() }
+    // The core variant has no notification listener, so its detection-related steps are left out.
+    val steps = remember {
+        buildList {
+            add(Step.WELCOME); add(Step.NOTIFICATIONS)
+            if (Features.detection) { add(Step.DETECTION); add(Step.APPS); add(Step.SENDER) } else add(Step.CORE_INFO)
+            add(Step.TIMING)
+        }
+    }
+    var index by remember { mutableIntStateOf(0) }
+    val last = steps.size - 1
+    val next: () -> Unit = { if (index < last) index++ else vm.finishOnboarding() }
 
     Column(Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = 24.dp, vertical = 16.dp)) {
-        LinearProgressIndicator(progress = { (step + 1f) / STEPS }, modifier = Modifier.fillMaxWidth())
+        LinearProgressIndicator(progress = { (index + 1f) / steps.size }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(24.dp))
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            when (step) {
-                0 -> WelcomeStep()
-                1 -> NotificationsStep()
-                2 -> DetectionStep()
-                3 -> AppsStep(vm)
-                4 -> SenderStep(vm)
-                else -> TimingStep()
+            when (steps[index]) {
+                Step.WELCOME -> WelcomeStep()
+                Step.NOTIFICATIONS -> NotificationsStep()
+                Step.DETECTION -> DetectionStep()
+                Step.APPS -> AppsStep(vm)
+                Step.SENDER -> SenderStep(vm)
+                Step.CORE_INFO -> CoreInfoStep()
+                Step.TIMING -> TimingStep()
             }
         }
         Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (step > 0) TextButton(onClick = { step-- }) { Text("Back") }
+            if (index > 0) TextButton(onClick = { index-- }) { Text("Back") }
             Spacer(Modifier.weight(1f))
-            Button(onClick = next) { Text(if (step == STEPS - 1) "Start using Nudge" else "Continue") }
+            Button(onClick = next) { Text(if (index == last) "Start using Nudge" else "Continue") }
         }
     }
 }

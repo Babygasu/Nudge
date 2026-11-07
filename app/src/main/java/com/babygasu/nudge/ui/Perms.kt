@@ -30,7 +30,8 @@ object Perms {
             ContextCompat.checkSelfPermission(c, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
     fun listenerGranted(c: Context): Boolean =
-        NotificationManagerCompat.getEnabledListenerPackages(c).contains(c.packageName)
+        com.babygasu.nudge.Features.detection &&
+            NotificationManagerCompat.getEnabledListenerPackages(c).contains(c.packageName)
 
     fun exactAlarmsAllowed(c: Context): Boolean = c.container.scheduler.canScheduleExact()
 

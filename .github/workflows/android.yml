@@ -1,9 +1,13 @@
-name: Build dev APK
+name: Build dev APKs
 
 # Development builds use Android's standard debug signing. No signing secrets are needed.
 # The debug certificate is generated fresh on each CI runner, so it can differ between builds:
 # installing a newer build may require uninstalling the previous one (this erases its test data).
 # Stable signing is deferred until we prepare stable releases (see docs/SIGNING.md).
+#
+# Two variants are built (see docs/PLAY_PROTECT.md):
+#   core: no notification access, overlay or app-visibility queries; installs from a browser.
+#   full: complete Nudge; Play Protect may block browser installs, so install it with ADB.
 
 on:
   push:
@@ -41,20 +45,39 @@ jobs:
       - name: Unit tests
         run: gradle test --stacktrace
 
-      - name: Build debug APK
-        run: gradle assembleDebug --stacktrace
+      - name: Build debug APKs (core + full)
+        run: gradle assembleCoreDebug assembleFullDebug --stacktrace
 
-      - name: Verify APK signature
+      - name: Verify signatures and audit permissions
         run: |
-          APK=app/build/outputs/apk/debug/app-debug.apk
-          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner"
-          "$APKSIGNER" verify --print-certs "$APK" | tee certs.txt
-          grep -q "CN=Android Debug" certs.txt || { echo "::error::APK is not signed with the standard Android debug certificate"; exit 1; }
-          FINGERPRINT=$(grep -m1 "certificate SHA-256 digest" certs.txt | awk '{print $NF}')
+          set -euo pipefail
+          BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
           mkdir -p out
-          cp "$APK" "out/nudge-dev-${{ github.run_number }}.apk"
-          echo "$FINGERPRINT" > out/certificate-sha256.txt
-          echo "Debug certificate SHA-256: $FINGERPRINT"
+          for VARIANT in core full; do
+            APK="app/build/outputs/apk/$VARIANT/debug/app-$VARIANT-debug.apk"
+            "$BT/apksigner" verify --print-certs "$APK" > "certs-$VARIANT.txt"
+            grep -q "CN=Android Debug" "certs-$VARIANT.txt" || { echo "::error::$VARIANT APK is not debug-signed"; exit 1; }
+            "$BT/aapt2" dump permissions "$APK" | grep -oE "name='[^']+'" | sed "s/name='//; s/'//" | sort -u > "out/permissions-$VARIANT.txt"
+            "$BT/aapt2" dump xmltree "$APK" --file AndroidManifest.xml > "manifest-$VARIANT.txt"
+            cp "$APK" "out/nudge-$VARIANT-dev-${{ github.run_number }}.apk"
+            grep -m1 "certificate SHA-256 digest" "certs-$VARIANT.txt" | awk '{print $NF}' > "out/certificate-$VARIANT.txt"
+            echo "== $VARIANT permissions:"; cat "out/permissions-$VARIANT.txt"
+          done
+
+          # Nothing may grant network access in either variant.
+          if grep -q "android.permission.INTERNET" out/permissions-*.txt; then
+            echo "::error::An APK requests INTERNET"; exit 1
+          fi
+          # Never request SMS, call log, contacts, location, accessibility or other high-risk access.
+          if grep -E "READ_SMS|RECEIVE_SMS|SEND_SMS|READ_CALL_LOG|READ_CONTACTS|LOCATION|READ_PHONE|BIND_ACCESSIBILITY_SERVICE|QUERY_ALL_PACKAGES|REQUEST_INSTALL_PACKAGES" out/permissions-*.txt manifest-*.txt; then
+            echo "::error::A high-risk permission was found"; exit 1
+          fi
+          # The core variant must not contain notification access, overlays or package-visibility queries.
+          if grep -E "BIND_NOTIFICATION_LISTENER_SERVICE|SYSTEM_ALERT_WINDOW|FOREGROUND_SERVICE_SPECIAL_USE|NotificationListenerService|queries" manifest-core.txt; then
+            echo "::error::core APK contains a capability it must not have"; exit 1
+          fi
+          grep -q "BIND_NOTIFICATION_LISTENER_SERVICE" manifest-full.txt || { echo "::error::full APK lost its notification listener"; exit 1; }
+          echo "Permission audit passed."
 
       - name: Upload test reports
         if: always()
@@ -65,16 +88,16 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Upload APK artifact
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
           name: nudge-dev-${{ github.run_number }}
           path: out/
           retention-days: 30
 
-  # Publishes the APK as a GitHub pre-release so it can be downloaded directly on the phone.
+  # Publishes the APKs as a GitHub pre-release so they can be downloaded directly on the phone.
   # Runs only for pushes to this repository (never for pull requests), checks out no code,
-  # and only handles the already-built APK.
+  # and only handles the already-built APKs.
   publish:
     needs: build
     if: github.event_name != 'pull_request'
@@ -95,23 +118,36 @@ jobs:
           RUN: ${{ github.run_number }}
           BRANCH: ${{ github.ref_name }}
         run: |
-          FINGERPRINT=$(cat out/certificate-sha256.txt)
+          CORE_PERMS=$(sed 's/^/  - /' out/permissions-core.txt)
+          FULL_PERMS=$(sed 's/^/  - /' out/permissions-full.txt)
           SHORT_SHA="${GITHUB_SHA::7}"
           cat > notes.md <<EOF
-          ⚠️ **Development / testing build. Not a stable release.**
+          ⚠️ **Development / testing build. Not a stable release.** Build ${RUN}, branch ${BRANCH}, commit ${SHORT_SHA}.
 
-          - Build ${RUN} from branch ${BRANCH} (commit ${SHORT_SHA}).
-          - Signed with a temporary Android debug key. If installing it over an older Nudge build fails
-            with "App not installed" or "package conflicts", uninstall **Nudge (debug)** first.
-            This erases its test reminders.
-          - For testing only. Don't rely on it for real reminders yet.
+          ### Which APK?
+          **nudge-core-dev-${RUN}.apk: install this from your phone's browser.**
+          Dashboard, manual reminders, offline scheduling, Share → Nudge / paste analysis, Privacy Centre.
+          It has **no** notification access, overlay or app-visibility features, so it isn't affected by
+          Play Protect's block on sideloaded apps that request notification access.
 
-          **Install:** on your Android phone, download nudge-dev-${RUN}.apk below and open it.
-          Allow your browser to install apps if asked. Guide: docs/INSTALL_AND_TEST.md
+          **nudge-full-dev-${RUN}.apk: complete Nudge, including automatic message detection.**
+          Play Protect blocks browser installs of apps that declare notification access in some countries. Install this one
+          over USB/wireless debugging (ADB) instead. See docs/PLAY_PROTECT.md. Don't disable Play Protect.
 
-          Debug certificate SHA-256: ${FINGERPRINT}
+          Both are signed with a temporary Android debug key. If an update fails with "App not installed",
+          uninstall the previous build first (this erases its test reminders).
+
+          ### Permissions requested (verified in CI; neither variant can access the internet)
+          Core:
+          ${CORE_PERMS}
+
+          Full:
+          ${FULL_PERMS}
+
+          Debug certificate SHA-256: core $(cat out/certificate-core.txt) · full $(cat out/certificate-full.txt)
           EOF
-          gh release create "dev-${RUN}" "out/nudge-dev-${RUN}.apk" \
+          gh release create "dev-${RUN}" \
+            "out/nudge-core-dev-${RUN}.apk" "out/nudge-full-dev-${RUN}.apk" \
             --target "$GITHUB_SHA" \
             --title "Nudge DEV build ${RUN} (testing only)" \
             --notes-file notes.md \

@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.babygasu.nudge.BuildConfig
+import com.babygasu.nudge.Features
 import com.babygasu.nudge.bubble.BubbleService
 import com.babygasu.nudge.intelligence.Priority
 import com.babygasu.nudge.ui.Format
@@ -96,6 +97,7 @@ fun SettingsScreen(vm: NudgeViewModel) {
                 }
             } }
 
+            if (Features.bubble) {
             item { SectionHeader("Floating bubble") }
             item {
                 ListItem(
@@ -119,6 +121,7 @@ fun SettingsScreen(vm: NudgeViewModel) {
                     },
                 )
             }
+            }
 
             item { SectionHeader("Reliability") }
             item {
@@ -126,9 +129,11 @@ fun SettingsScreen(vm: NudgeViewModel) {
                     Perms.openNotificationSettings(context)
                 }
             }
-            item {
-                StatusRow("Message detection", listener, "Notification access is on", "Notification access is off") {
-                    Perms.openListenerSettings(context)
+            if (Features.detection) {
+                item {
+                    StatusRow("Message detection", listener, "Notification access is on", "Notification access is off") {
+                        Perms.openListenerSettings(context)
+                    }
                 }
             }
             item {
@@ -142,6 +147,7 @@ fun SettingsScreen(vm: NudgeViewModel) {
                 }
             }
 
+            if (Features.detection) {
             item { SectionHeader("Test detection") }
             item {
                 Text(
@@ -162,6 +168,17 @@ fun SettingsScreen(vm: NudgeViewModel) {
                         },
                         modifier = Modifier.padding(top = 6.dp),
                     ) { Text("“$sample”", maxLines = 2) }
+                }
+            }
+            } else {
+                item { SectionHeader("Test understanding") }
+                item {
+                    Text(
+                        "Nudge Core can't read notifications. To test how Nudge understands messages, use Share → Nudge " +
+                            "from any app, or the ✎ button on the Today screen to paste a message.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 

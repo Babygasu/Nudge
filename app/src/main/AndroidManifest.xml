@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Shared by both variants. Only low-risk permissions live here.
+    Notification access, the overlay bubble and app-visibility queries are declared ONLY in
+    src/full/AndroidManifest.xml, so the "core" variant contains none of them (CI verifies this).
+-->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -8,42 +13,12 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Deliver reminders on time. Optional: the user can refuse and reminders arrive a few minutes late. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <!-- Optional floating bubble. -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <!--
-        Privacy guarantee for Phase 1: Nudge has no internet access at all.
+        Privacy guarantee: Nudge has no internet access at all.
         "remove" strips the permission even if a library tries to add it.
     -->
     <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
-
-    <!-- Lets Nudge show which of your apps it can listen to (names only). -->
-    <queries>
-        <intent>
-            <action android:name="android.intent.action.MAIN" />
-            <category android:name="android.intent.category.LAUNCHER" />
-        </intent>
-        <package android:name="com.whatsapp" />
-        <package android:name="com.whatsapp.w4b" />
-        <package android:name="org.telegram.messenger" />
-        <package android:name="org.thoughtcrime.securesms" />
-        <package android:name="com.facebook.orca" />
-        <package android:name="com.google.android.apps.messaging" />
-        <package android:name="com.samsung.android.messaging" />
-        <package android:name="com.google.android.gm" />
-        <package android:name="com.microsoft.office.outlook" />
-        <package android:name="com.samsung.android.email.provider" />
-        <package android:name="com.Slack" />
-        <package android:name="com.microsoft.teams" />
-        <package android:name="com.google.android.dialer" />
-        <package android:name="com.samsung.android.dialer" />
-        <package android:name="com.android.server.telecom" />
-        <package android:name="com.samsung.android.incallui" />
-        <package android:name="com.android.dialer" />
-        <package android:name="com.linkedin.android" />
-    </queries>
 
     <application
         android:name=".NudgeApp"
@@ -52,7 +27,7 @@
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
+        android:label="${appName}${labelSuffix}"
         android:supportsRtl="true"
         android:theme="@style/Theme.Nudge"
         tools:targetApi="35">
@@ -73,25 +48,6 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
-
-        <service
-            android:name=".capture.NudgeNotificationListener"
-            android:exported="true"
-            android:label="@string/listener_label"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
-            <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService" />
-            </intent-filter>
-        </service>
-
-        <service
-            android:name=".bubble.BubbleService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Floating reminder bubble that the user turns on to see pending reminders over other apps" />
-        </service>
 
         <receiver
             android:name=".reminders.ReminderAlarmReceiver"

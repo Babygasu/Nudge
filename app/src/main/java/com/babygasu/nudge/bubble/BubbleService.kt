@@ -154,7 +154,7 @@ class BubbleService : Service() {
 
         /** Call only while Nudge is on screen (Android restricts starting this from the background). */
         fun start(context: Context) {
-            if (!Settings.canDrawOverlays(context)) return
+            if (!com.babygasu.nudge.Features.bubble || !Settings.canDrawOverlays(context)) return
             runCatching { context.startForegroundService(Intent(context, BubbleService::class.java)) }
                 .onFailure { SafeLog.error("bubble", "start_failed", it) }
         }

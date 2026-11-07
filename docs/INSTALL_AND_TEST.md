@@ -8,7 +8,10 @@ No USB cable, no Android Studio. Every push to GitHub builds a new APK automatic
 
 1. Open **https://github.com/Babygasu/Nudge/releases** in your phone's browser.
 2. The newest build is at the top: **"Nudge DEV build N (testing only)"**, marked *Pre-release*.
-3. Under **Assets**, tap **`nudge-dev-N.apk`** to download it.
+3. Under **Assets** there are two APKs:
+   - **`nudge-core-dev-N.apk`**: install this one from the phone. No message detection; everything else works.
+   - **`nudge-full-dev-N.apk`**: complete Nudge. Play Protect blocks browser installs of it in some countries, because it
+     declares notification access. Install it with ADB instead. See [PLAY_PROTECT.md](PLAY_PROTECT.md).
 
 **On the laptop** (alternative): GitHub → **Actions** → the latest green run → **Artifacts** → `nudge-dev-N`. This downloads a `.zip` containing the APK, so you'd have to move it to the phone yourself. The Releases page is simpler.
 
@@ -18,10 +21,11 @@ No USB cable, no Android Studio. Every push to GitHub builds a new APK automatic
 
 1. Tap the downloaded file (or open it from **Downloads**).
 2. The first time, Android asks to allow your browser (e.g. Chrome) to **install unknown apps**. Allow it, go back, and tap **Install**.
-3. Google Play Protect may warn that the app is unrecognised. This is expected for test builds: tap **More details → Install anyway**.
-4. The app appears as **"Nudge (debug)"**.
+3. Google Play Protect may warn that the app is unrecognised. If that warning offers **More details → Install anyway**, it's the normal "unknown developer" warning for test builds.
+   If it says **"App blocked to protect your device"** with only OK, that's the sensitive-permission block described in [PLAY_PROTECT.md](PLAY_PROTECT.md). Don't disable Play Protect; use the core APK or ADB instead.
+4. The app appears as **"Nudge Core (dev)"** or **"Nudge (dev)"**.
 
-**Updating:** try installing the newer APK over the old one. Development builds use a temporary debug key that can change between builds. If Android says *"App not installed"* or *"package conflicts"*, uninstall **Nudge (debug)** (long-press the icon → App info → Uninstall) and install the new one. This erases its test reminders, and you'll need to redo onboarding, including "Allow restricted settings". See [SIGNING.md](SIGNING.md).
+**Updating:** try installing the newer APK over the old one. Development builds use a temporary debug key that can change between builds. If Android says *"App not installed"* or *"package conflicts"*, uninstall that Nudge app (long-press the icon → App info → Uninstall) and install the new one. This erases its test reminders, and you'll need to redo onboarding, including "Allow restricted settings". See [SIGNING.md](SIGNING.md).
 
 ## 3. First-run setup (about 2 minutes)
 

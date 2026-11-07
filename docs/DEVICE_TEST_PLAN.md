@@ -6,9 +6,14 @@ Other tests are important but can become Phase 2 fixes.
 Record for each test: ✅ pass · ❌ fail (what happened + screenshot, never of private messages) · ⏭ skipped.
 Note at the top: **phone model, Android version, build number** (Settings → About).
 
-**Before you start:** install the newest build from Releases (see INSTALL_AND_TEST.md) and complete onboarding:
-notifications on, notification access on (incl. "Allow restricted settings"), WhatsApp + Phone app ticked,
-on-time reminders allowed, battery set to Unrestricted. Leave sender names **on** for this round (easier to read).
+**Two rounds** (see PLAY_PROTECT.md for why):
+- **Round 1: Nudge Core**, installed from the phone's browser: sections **2, 3, 4.4, 5.1–5.3, 6.1, 6.5, 6.6**.
+  In Core, use Share → Nudge or the ✎ paste screen wherever a test mentions "Test detection".
+- **Round 2: full Nudge**, installed over ADB: sections **1, 4.1–4.3, 5.4–5.6, 6.2, 6.3** (plus a quick repeat of 3.1).
+
+**Before each round:** install the newest build (see INSTALL_AND_TEST.md) and complete onboarding: notifications on,
+on-time reminders allowed, battery set to Unrestricted. For the full build, also turn on notification access
+(incl. "Allow restricted settings"), tick WhatsApp + Phone, and leave sender names **on** (easier to read).
 
 ---
 
